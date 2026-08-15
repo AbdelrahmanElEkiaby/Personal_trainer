@@ -55,6 +55,9 @@ class Settings(BaseSettings):
     # API settings
     app_name: str = "Personal Trainer Agent"
     app_version: str = "1.0.0"
+    # The addresses the React frontend is served from. A browser refuses to call
+    # an API on another port unless that API says the address is allowed.
+    frontend_origins: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]
 
 
 settings = Settings()
