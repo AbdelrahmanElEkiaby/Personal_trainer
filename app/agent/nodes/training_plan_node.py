@@ -1,0 +1,28 @@
+from app.agent.llm_provider import get_llm
+from app.agent.prompts import TRAINING_PLAN_PROMPT
+from app.agent.state import TrainerState
+from app.schemas.training_plan import TrainingPlan
+
+
+def design_training_plan_node(state: TrainerState) -> dict:
+    """Third step: ask the model for a training plan that matches the diet plan."""
+    user_profile = state["user_profile"]
+    bmi_result = state["bmi_result"]
+    diet_plan = state["diet_plan"]
+
+    prompt = TRAINING_PLAN_PROMPT.format(
+        age=user_profile.age,
+        gender=user_profile.gender.value,
+        weight_kg=user_profile.weight_kg,
+        height_cm=user_profile.height_cm,
+        activity_level=user_profile.activity_level.value,
+        workout_days_per_week=user_profile.workout_days_per_week,
+        medical_conditions=", ".join(user_profile.medical_conditions) or "none",
+        bmi=bmi_result.bmi,
+        bmi_category=bmi_result.category,
+        daily_calories=diet_plan.daily_calories,
+    )
+
+    llm = get_llm().with_structured_output(TrainingPlan)
+    training_plan = llm.invoke(prompt)
+    return {"training_plan": training_plan}
