@@ -7,10 +7,13 @@ with an error, it simply ignores the filter and sends all the 1500 exercises. So
 we always check the filter name ourselves before we call it.
 """
 
+import time
+
 import httpx
 
 from app.core.config import settings
 from app.schemas.exercise_info import ExerciseInfo
+from app.services.log_service import log_api_call
 
 # The paths that give us the names the API accepts.
 BODY_PARTS_PATH = "/bodyparts"
@@ -33,6 +36,7 @@ class ExerciseDbError(Exception):
 
 def _call_exercisedb(path: str, params: dict) -> dict | list:
     """Call the API and give back what is inside the 'data' field."""
+    started_at = time.perf_counter()
     try:
         response = httpx.get(
             f"{settings.exercisedb_base_url}{path}",
@@ -41,8 +45,22 @@ def _call_exercisedb(path: str, params: dict) -> dict | list:
         )
         response.raise_for_status()
     except httpx.HTTPError as error:
+        log_api_call(
+            "exercisedb",
+            path,
+            params,
+            duration_ms=round((time.perf_counter() - started_at) * 1000),
+            error=str(error),
+        )
         raise ExerciseDbError(f"Could not read '{path}': {error}")
 
+    log_api_call(
+        "exercisedb",
+        path,
+        params,
+        duration_ms=round((time.perf_counter() - started_at) * 1000),
+        status_code=response.status_code,
+    )
     return response.json().get("data", [])
 
 

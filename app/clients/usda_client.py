@@ -4,10 +4,13 @@ The API gives every number for 100 grams of the food, so we scale the numbers
 ourselves to the portion the user asked for.
 """
 
+import time
+
 import httpx
 
 from app.core.config import settings
 from app.schemas.food_nutrition import FoodNutrition, FoodSearchResult, Micronutrient
+from app.services.log_service import log_api_call
 
 # USDA gives every nutrient a number. These are the ones we care about.
 CALORIES_NUMBER = "208"
@@ -68,6 +71,36 @@ def _build_params(extra_params: dict) -> dict:
     return params
 
 
+def _call_usda(path: str, extra_params: dict, what_we_wanted: str) -> dict:
+    """Call USDA one time, write the log line, and give back the answer."""
+    started_at = time.perf_counter()
+    try:
+        response = httpx.get(
+            f"{settings.usda_base_url}{path}",
+            params=_build_params(extra_params),
+            timeout=settings.usda_timeout_seconds,
+        )
+        response.raise_for_status()
+    except httpx.HTTPError as error:
+        log_api_call(
+            "usda",
+            path,
+            extra_params,
+            duration_ms=round((time.perf_counter() - started_at) * 1000),
+            error=str(error),
+        )
+        raise UsdaApiError(f"Could not {what_we_wanted}: {error}")
+
+    log_api_call(
+        "usda",
+        path,
+        extra_params,
+        duration_ms=round((time.perf_counter() - started_at) * 1000),
+        status_code=response.status_code,
+    )
+    return response.json()
+
+
 def get_searchable_words(food_name: str) -> list[str]:
     """Keep only the words that really describe the food we are looking for."""
     words = food_name.lower().replace(",", " ").replace("-", " ").split()
@@ -94,23 +127,13 @@ def search_foods(food_name: str, how_many: int = 5) -> list[FoodSearchResult]:
     USDA answers almost every search, so we drop the results that have nothing to
     do with the food we asked for.
     """
-    try:
-        response = httpx.get(
-            f"{settings.usda_base_url}/foods/search",
-            params=_build_params(
-                {
-                    "query": food_name,
-                    "dataType": GENERIC_FOOD_TYPES,
-                    "pageSize": how_many,
-                }
-            ),
-            timeout=settings.usda_timeout_seconds,
-        )
-        response.raise_for_status()
-    except httpx.HTTPError as error:
-        raise UsdaApiError(f"Could not search for '{food_name}': {error}")
+    answer = _call_usda(
+        "/foods/search",
+        {"query": food_name, "dataType": GENERIC_FOOD_TYPES, "pageSize": how_many},
+        f"search for '{food_name}'",
+    )
 
-    foods = response.json().get("foods", [])
+    foods = answer.get("foods", [])
     searchable_words = get_searchable_words(food_name)
 
     return [
@@ -126,17 +149,7 @@ def search_foods(food_name: str, how_many: int = 5) -> list[FoodSearchResult]:
 
 def get_food_nutrition(fdc_id: int, portion_grams: float = 100) -> FoodNutrition:
     """Get the full nutrition of one food, scaled to the portion we want."""
-    try:
-        response = httpx.get(
-            f"{settings.usda_base_url}/food/{fdc_id}",
-            params=_build_params({}),
-            timeout=settings.usda_timeout_seconds,
-        )
-        response.raise_for_status()
-    except httpx.HTTPError as error:
-        raise UsdaApiError(f"Could not read the food {fdc_id}: {error}")
-
-    food = response.json()
+    food = _call_usda(f"/food/{fdc_id}", {}, f"read the food {fdc_id}")
     scale = portion_grams / USDA_PORTION_GRAMS
 
     calories = 0.0

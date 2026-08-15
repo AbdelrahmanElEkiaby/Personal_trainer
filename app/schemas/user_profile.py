@@ -1,27 +1,6 @@
-from enum import Enum
-
 from pydantic import BaseModel, Field
 
-
-class Gender(str, Enum):
-    MALE = "male"
-    FEMALE = "female"
-
-
-class TrainingLocation(str, Enum):
-    """Where the person trains. We use it to know which equipment they can use."""
-
-    HOME_BODY_WEIGHT = "home_body_weight"
-    HOME_WITH_DUMBBELLS = "home_with_dumbbells"
-    GYM = "gym"
-
-
-class ActivityLevel(str, Enum):
-    SEDENTARY = "sedentary"
-    LIGHTLY_ACTIVE = "lightly_active"
-    MODERATELY_ACTIVE = "moderately_active"
-    VERY_ACTIVE = "very_active"
-    EXTREMELY_ACTIVE = "extremely_active"
+from app.schemas.enums import ActivityLevel, Gender, TrainingLocation
 
 
 class UserProfile(BaseModel):

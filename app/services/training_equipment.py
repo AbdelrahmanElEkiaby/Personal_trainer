@@ -5,7 +5,7 @@ API ignores the filter and sends back every exercise. The full list of names
 comes from app/clients/exercisedb_client.py -> get_equipments().
 """
 
-from app.schemas.user_profile import TrainingLocation
+from app.schemas.enums import TrainingLocation
 
 EQUIPMENT_BY_LOCATION = {
     TrainingLocation.HOME_BODY_WEIGHT: [

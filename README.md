@@ -113,6 +113,64 @@ We turn it into a list of equipment names in
 `app/services/training_equipment.py`, and the training plan can only use
 exercises that need one of those equipments.
 
+## The logs
+
+Every request is written to `logs/trainer.log`, one JSON object per line, and a
+short readable line is printed in the terminal.
+
+Every line has the same six keys:
+
+```json
+{
+  "timestamp": "2026-08-15T16:25:42.575Z",
+  "request_id": "1a25527e",
+  "level": "INFO",
+  "step": "enrich_diet_plan",
+  "event": "node_finished",
+  "duration_ms": 17453,
+  "details": {},
+  "error": null
+}
+```
+
+Every line of one request shares the same `request_id`, and the answer sends it
+back in the `X-Request-Id` header, so you can read a full trace with:
+
+```bash
+grep 1a25527e logs/trainer.log
+```
+
+The last line of every request is a summary that says where the time went:
+
+```json
+{"event": "request_finished", "duration_ms": 94552, "details": {
+  "status_code": 200,
+  "steps": {"calculate_bmi": 0, "design_diet_plan": 38209, "enrich_diet_plan": 17453,
+            "design_training_plan": 34377, "enrich_training_plan": 4466},
+  "llm_calls": 2, "llm_retries": 0, "usda_calls": 15, "exercisedb_calls": 14}}
+```
+
+The most useful event is `food_matched`, because it writes the name we asked for
+next to the name the API gave back:
+
+```json
+{"event": "food_matched", "details": {
+  "asked": "Baked salmon", "matched": "Fish oil, salmon",
+  "calories_before": 180.0, "calories_after": 1082.4}}
+```
+
+### Settings
+
+| Setting              | What it does                                          |
+| -------------------- | ----------------------------------------------------- |
+| `LOG_LEVEL`          | `DEBUG` also writes every USDA and ExerciseDB call    |
+| `LOG_FILE_PATH`      | Where the JSON file is written                        |
+| `LOG_TO_CONSOLE`     | Turn the readable terminal lines off                  |
+| `LOG_FULL_PAYLOADS`  | Write the full prompts and the full plans             |
+| `LOG_USER_DETAILS`   | Write the profile, which has the medical conditions   |
+
+The API key is never written, and `logs/` is in `.gitignore`.
+
 ## The tools
 
 The files in `app/tools/` are ready but no node calls them yet. When we want the

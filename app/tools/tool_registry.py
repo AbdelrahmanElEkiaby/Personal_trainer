@@ -13,17 +13,12 @@ from app.tools.food_data_tools import (
     get_food_nutrition_facts,
     search_foods_by_name,
 )
-from app.tools.nutrition_tools import (
-    calculate_daily_water_liters,
-    calculate_macros_calories,
-    find_food_alternatives,
-)
+from app.tools.nutrition_tools import calculate_daily_water_liters, calculate_macros_calories
 from app.tools.workout_tools import estimate_workout_minutes, get_unsafe_exercises
 
 # Tools that only use our own simple math and tables.
 NUTRITION_TOOLS = [
     calculate_macros_calories,
-    find_food_alternatives,
     calculate_daily_water_liters,
 ]
 

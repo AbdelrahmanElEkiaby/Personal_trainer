@@ -1,7 +1,8 @@
 """All the health math lives here so the rest of the app stays simple."""
 
 from app.schemas.bmi_result import BmiResult
-from app.schemas.user_profile import ActivityLevel, Gender, UserProfile
+from app.schemas.enums import ActivityLevel, Gender
+from app.schemas.user_profile import UserProfile
 
 # How much we multiply the resting calories by, based on the activity level.
 ACTIVITY_MULTIPLIERS = {

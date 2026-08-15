@@ -23,6 +23,17 @@ class Settings(BaseSettings):
     exercisedb_base_url: str = "https://oss.exercisedb.dev/api/v1"
     exercisedb_timeout_seconds: int = 30
 
+    # Logging settings
+    log_level: str = "INFO"
+    log_file_path: str = "logs/trainer.log"
+    log_to_console: bool = True
+    # Writes the full prompts and the full plans. Very useful to find a problem,
+    # but it makes the log file grow fast.
+    log_full_payloads: bool = True
+    # The profile has the age, the weight and the medical conditions, so turn
+    # this off if these should not be written in a file.
+    log_user_details: bool = True
+
     # API settings
     app_name: str = "Personal Trainer Agent"
     app_version: str = "1.0.0"

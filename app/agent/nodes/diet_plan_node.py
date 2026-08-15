@@ -1,9 +1,11 @@
 from app.agent.llm_provider import ask_model_for
+from app.agent.node_logging import log_node
 from app.agent.prompts import DIET_PLAN_PROMPT
 from app.agent.state import TrainerState
 from app.schemas.diet_plan import DietPlan
 
 
+@log_node("design_diet_plan")
 def design_diet_plan_node(state: TrainerState) -> dict:
     """Second step: ask the model for a diet plan that fits the calculated numbers."""
     user_profile = state["user_profile"]

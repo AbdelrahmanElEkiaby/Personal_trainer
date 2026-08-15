@@ -5,17 +5,29 @@ after it answers, we go to USDA and to ExerciseDB, take the real values, and put
 them in the plan. Then we do the additions ourselves in Python.
 """
 
+import logging
 import re
 
 from app.clients import exercisedb_client, usda_client
 from app.clients.exercisedb_client import ExerciseDbError
 from app.clients.usda_client import UsdaApiError
 from app.schemas.diet_plan import DietPlan
-from app.schemas.training_plan import AvoidedExercise, TrainingPlan
+from app.schemas.training_plan import TrainingPlan
+from app.services.log_service import log_event
 from app.services.medical_safety import is_exercise_unsafe
+from app.services.nutrition_math import calculate_macros_calories
 
 # When a portion is written like "1 medium" we cannot know the grams, so we use this.
 DEFAULT_PORTION_GRAMS = 100
+
+# The calories of a food should be close to what its macros give. Real foods are
+# never exact because of fiber and rounding, so we only complain after this much.
+BIGGEST_ALLOWED_MACRO_DIFFERENCE = 0.25
+
+# When USDA gives us a number this many times bigger or smaller than what the
+# model guessed, we probably matched the wrong food.
+CALORIES_JUMPED_UP = 2.5
+CALORIES_JUMPED_DOWN = 0.4
 
 
 def read_portion_grams(portion: str) -> float:
@@ -33,20 +45,48 @@ def enrich_diet_plan(diet_plan: DietPlan) -> DietPlan:
     for meal in diet_plan.meals:
         for food in meal.foods:
             portion_grams = read_portion_grams(food.portion)
+            why_it_failed = ""
             try:
                 real_food = usda_client.find_food_nutrition(food.food_name, portion_grams)
-            except UsdaApiError:
+            except UsdaApiError as error:
                 real_food = None
+                why_it_failed = str(error)
 
             if real_food is None:
                 foods_not_found.append(food.food_name)
+                log_event(
+                    "enrichment",
+                    "food_not_found",
+                    details={"asked": food.food_name, "kept_estimation": food.calories},
+                    error=why_it_failed or None,
+                    level=logging.WARNING,
+                )
                 continue
+
+            # The name we asked for and the name USDA gave us are both written
+            # down, because they are often not the same food at all.
+            log_event(
+                "enrichment",
+                "food_matched",
+                details={
+                    "asked": food.food_name,
+                    "matched": real_food.food_name,
+                    "fdc_id": real_food.fdc_id,
+                    "portion_grams": portion_grams,
+                    "calories_before": food.calories,
+                    "calories_after": real_food.calories,
+                },
+            )
+
+            calories_the_model_guessed = food.calories
 
             food.calories = real_food.calories
             food.protein_grams = real_food.protein_grams
             food.carbs_grams = real_food.carbs_grams
             food.fat_grams = real_food.fat_grams
             food.micronutrients = real_food.micronutrients
+
+            _check_the_numbers_make_sense(food, calories_the_model_guessed)
 
         # The model cannot add, so we do it.
         meal.total_calories = round(sum(food.calories for food in meal.foods))
@@ -63,6 +103,48 @@ def enrich_diet_plan(diet_plan: DietPlan) -> DietPlan:
         )
 
     return diet_plan
+
+
+def _check_the_numbers_make_sense(food, calories_the_model_guessed: float) -> None:
+    """Two checks that warn us when a food looks wrong.
+
+    We only write a log line, we never change the plan, because we cannot know
+    which of the two numbers is the correct one.
+    """
+    # Check 1: the macros should explain the calories.
+    calories_from_macros = calculate_macros_calories(
+        food.protein_grams, food.carbs_grams, food.fat_grams
+    )
+    if food.calories > 0:
+        difference = abs(calories_from_macros - food.calories) / food.calories
+        if difference > BIGGEST_ALLOWED_MACRO_DIFFERENCE:
+            log_event(
+                "enrichment",
+                "food_numbers_look_wrong",
+                details={
+                    "food": food.food_name,
+                    "calories": food.calories,
+                    "calories_from_macros": round(calories_from_macros, 1),
+                    "difference_percent": round(difference * 100),
+                },
+                level=logging.WARNING,
+            )
+
+    # Check 2: a very big jump usually means we matched the wrong food.
+    if calories_the_model_guessed > 0:
+        how_many_times = food.calories / calories_the_model_guessed
+        if how_many_times > CALORIES_JUMPED_UP or how_many_times < CALORIES_JUMPED_DOWN:
+            log_event(
+                "enrichment",
+                "food_calories_jumped",
+                details={
+                    "food": food.food_name,
+                    "model_guessed": calories_the_model_guessed,
+                    "usda_says": food.calories,
+                    "how_many_times": round(how_many_times, 1),
+                },
+                level=logging.WARNING,
+            )
 
 
 def _add_up(diet_plan: DietPlan, field_name: str) -> float:
@@ -112,7 +194,26 @@ def enrich_training_plan(
             real_exercise = _find_exercise_in_exercisedb(exercise.name, allowed_equipment)
             if real_exercise is None:
                 exercises_not_found.append(exercise.name)
+                log_event(
+                    "enrichment",
+                    "exercise_not_found",
+                    details={"asked": exercise.name, "day_number": day.day_number},
+                    level=logging.WARNING,
+                )
                 continue
+
+            log_event(
+                "enrichment",
+                "exercise_matched",
+                details={
+                    "asked": exercise.name,
+                    "matched": real_exercise.name,
+                    "exercise_id": real_exercise.exercise_id,
+                    "day_number": day.day_number,
+                    "muscles_before": exercise.target_muscles,
+                    "muscles_after": real_exercise.target_muscles,
+                },
+            )
 
             exercise.exercise_id = real_exercise.exercise_id
             exercise.name = real_exercise.name
@@ -147,4 +248,14 @@ def _check_the_plan_is_safe(training_plan: TrainingPlan, medical_conditions: lis
                 f"Careful: '{exercise.name}' on day {day.day_number} can be painful "
                 f"with your {dangerous_because}. Go slow, use a small weight, and stop "
                 f"if it hurts."
+            )
+            log_event(
+                "enrichment",
+                "safety_warning_added",
+                details={
+                    "exercise": exercise.name,
+                    "day_number": day.day_number,
+                    "condition": dangerous_because,
+                },
+                level=logging.WARNING,
             )

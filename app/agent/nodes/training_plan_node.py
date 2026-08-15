@@ -1,10 +1,12 @@
 from app.agent.llm_provider import ask_model_for
+from app.agent.node_logging import log_node
 from app.agent.prompts import TRAINING_PLAN_PROMPT
 from app.agent.state import TrainerState
 from app.schemas.training_plan import TrainingPlan
 from app.services.training_equipment import get_equipment_for_location
 
 
+@log_node("design_training_plan")
 def design_training_plan_node(state: TrainerState) -> dict:
     """Third step: ask the model for a training plan that matches the diet plan."""
     user_profile = state["user_profile"]
