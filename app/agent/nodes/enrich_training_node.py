@@ -1,7 +1,7 @@
 from app.agent.node_logging import log_node
 from app.agent.state import TrainerState
 from app.services.plan_enrichment import enrich_training_plan
-from app.services.training_equipment import get_equipment_for_location
+from app.domain.training_equipment import get_equipment_for_location
 
 
 @log_node("enrich_training_plan")

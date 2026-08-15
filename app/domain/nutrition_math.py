@@ -1,5 +1,7 @@
-"""The small nutrition calculations, kept away from the tools so the enrichment
-can use them too."""
+"""The small nutrition calculations: calories from macros, and daily water.
+
+Pure rules, so both the tools and the enrichment can use the same functions.
+"""
 
 # Calories that one gram of each macro nutrient gives.
 CALORIES_PER_GRAM = {"protein": 4, "carbs": 4, "fat": 9}

@@ -22,6 +22,7 @@ def design_diet_plan_node(state: TrainerState) -> dict:
         bmi=bmi_result.bmi,
         bmi_category=bmi_result.category,
         maintenance_calories=bmi_result.maintenance_calories,
+        food_facts=state.get("food_facts") or "You have no tool data, use what you know.",
     )
 
     diet_plan = ask_model_for(DietPlan, prompt)

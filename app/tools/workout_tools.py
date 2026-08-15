@@ -1,6 +1,6 @@
 from langchain_core.tools import tool
 
-from app.services.medical_safety import get_unsafe_exercises_for
+from app.domain.exercise_safety import get_unsafe_exercises_for
 
 
 @tool

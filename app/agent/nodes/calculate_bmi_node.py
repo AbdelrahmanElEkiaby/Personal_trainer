@@ -1,6 +1,6 @@
 from app.agent.node_logging import log_node
 from app.agent.state import TrainerState
-from app.services.bmi_calculator import build_bmi_result
+from app.domain.body_metrics import build_bmi_result
 
 
 @log_node("calculate_bmi")

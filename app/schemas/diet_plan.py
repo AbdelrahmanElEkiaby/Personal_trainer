@@ -6,6 +6,9 @@ from app.schemas.food_nutrition import Micronutrient
 class FoodItem(BaseModel):
     """One food inside a meal, with its own numbers."""
 
+    # When the model found the food with the tools it writes the id here, and then
+    # the enrichment reads the exact food instead of searching by name again.
+    fdc_id: str = Field(default="", description="The USDA id of this food, empty if we do not have it")
     food_name: str = Field(description="Name of the food, for example Banana")
     portion: str = Field(description="How much to eat, for example 120 g")
     # These are measured values, so they can have decimals, for example 0.2 g of fat.

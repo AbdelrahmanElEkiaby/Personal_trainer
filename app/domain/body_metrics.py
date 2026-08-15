@@ -1,4 +1,7 @@
-"""All the health math lives here so the rest of the app stays simple."""
+"""The body numbers we work out ourselves: BMI, BMR and daily calories.
+
+Pure rules: no API, no model, no logging. Same profile in, same numbers out.
+"""
 
 from app.schemas.bmi_result import BmiResult
 from app.schemas.enums import ActivityLevel, Gender

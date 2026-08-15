@@ -115,10 +115,38 @@ exercises that need one of those equipments.
 
 ## The logs
 
-Every request is written to `logs/trainer.log`, one JSON object per line, and a
-short readable line is printed in the terminal.
+Every run writes its own file in `logs/`, named after the time it started:
 
-Every line has the same six keys:
+```
+logs/
+  2026-08-15_18-47-37-831.json
+  2026-08-15_18-47-48-279.json
+```
+
+One file holds one request from start to finish, so a run can be read, kept, or
+compared with another run without touching the others. The milliseconds are in
+the name so two runs in the same second never share a file.
+
+Each file is a real JSON document, so `json.load()` works on it:
+
+```json
+{
+  "request_id": "740d8e63",
+  "started_at": "2026-08-15T18:47:48.279Z",
+  "finished_at": "2026-08-15T18:47:48.284Z",
+  "duration_ms": 4,
+  "method": "POST",
+  "path": "/trainer/plan",
+  "status_code": 422,
+  "summary": { "llm_calls": 0, "usda_calls": 0, "input_tokens": 0 },
+  "event_count": 2,
+  "events": [ ... ]
+}
+```
+
+A short readable line is also printed in the terminal while the app runs.
+
+Every event inside `events` has the same six keys:
 
 ```json
 {
@@ -133,14 +161,10 @@ Every line has the same six keys:
 }
 ```
 
-Every line of one request shares the same `request_id`, and the answer sends it
-back in the `X-Request-Id` header, so you can read a full trace with:
+The answer sends the id back in the `X-Request-Id` header, so you always know
+which file belongs to which call.
 
-```bash
-grep 1a25527e logs/trainer.log
-```
-
-The last line of every request is a summary that says where the time went:
+Every file ends with a summary that says where the time went:
 
 ```json
 {"event": "request_finished", "duration_ms": 94552, "details": {
@@ -164,7 +188,7 @@ next to the name the API gave back:
 | Setting              | What it does                                          |
 | -------------------- | ----------------------------------------------------- |
 | `LOG_LEVEL`          | `DEBUG` also writes every USDA and ExerciseDB call    |
-| `LOG_FILE_PATH`      | Where the JSON file is written                        |
+| `LOG_FOLDER`         | Where the run files are written                       |
 | `LOG_TO_CONSOLE`     | Turn the readable terminal lines off                  |
 | `LOG_FULL_PAYLOADS`  | Write the full prompts and the full plans             |
 | `LOG_USER_DETAILS`   | Write the profile, which has the medical conditions   |

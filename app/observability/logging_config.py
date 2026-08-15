@@ -1,38 +1,43 @@
-"""Sets up the two ways we write logs: a JSON file and a readable console line."""
+"""Sets up the two ways we write logs.
 
-import json
+The console gets one short readable line while the app runs. The lines themselves
+are kept in memory for the request that is running, and written together into one
+JSON file per run. See app/observability/run_log.py for the file itself.
+"""
+
 import logging
 from datetime import datetime, timezone
-from logging.handlers import RotatingFileHandler
-from pathlib import Path
 
 from app.core.config import settings
+from app.core.request_context import add_run_event
 
 LOGGER_NAME = "trainer"
 
-# We write full prompts and full plans, so the file grows fast. When it reaches
-# this size we start a new one and keep the last few.
-BIGGEST_FILE_BYTES = 10 * 1024 * 1024
-HOW_MANY_OLD_FILES = 5
+
+def build_log_line(record: logging.LogRecord) -> dict:
+    """Turn one log record into the plain dictionary we keep and write."""
+    written_at = datetime.fromtimestamp(record.created, timezone.utc)
+    return {
+        "timestamp": written_at.isoformat(timespec="milliseconds").replace("+00:00", "Z"),
+        "request_id": getattr(record, "request_id", ""),
+        "level": record.levelname,
+        "step": getattr(record, "step", ""),
+        "event": getattr(record, "event", record.getMessage()),
+        "duration_ms": getattr(record, "duration_ms", None),
+        "details": getattr(record, "details", {}),
+        "error": getattr(record, "error", None),
+    }
 
 
-class JsonLogFormatter(logging.Formatter):
-    """Writes one JSON object per line, always with the same keys."""
+class RunLogHandler(logging.Handler):
+    """Keeps every line of the running request, instead of writing it right away.
 
-    def format(self, record: logging.LogRecord) -> str:
-        written_at = datetime.fromtimestamp(record.created, timezone.utc)
-        line = {
-            "timestamp": written_at.isoformat(timespec="milliseconds").replace("+00:00", "Z"),
-            "request_id": getattr(record, "request_id", ""),
-            "level": record.levelname,
-            "step": getattr(record, "step", ""),
-            "event": getattr(record, "event", record.getMessage()),
-            "duration_ms": getattr(record, "duration_ms", None),
-            "details": getattr(record, "details", {}),
-            "error": getattr(record, "error", None),
-        }
-        # default=str so a date or any odd value never breaks the logging.
-        return json.dumps(line, default=str)
+    Nothing is written to disk here. The middleware writes the whole run in one
+    file when the request is over, so the file is always complete and valid JSON.
+    """
+
+    def emit(self, record: logging.LogRecord) -> None:
+        add_run_event(build_log_line(record))
 
 
 class ReadableLogFormatter(logging.Formatter):
@@ -59,21 +64,11 @@ def setup_logging() -> None:
     logger.setLevel(settings.log_level.upper())
 
     # Uvicorn restarts the app when we save a file, and without this check we
-    # would add the same handlers again and write every line twice.
+    # would add the same handlers again and keep every line twice.
     if logger.handlers:
         return
 
-    log_file = Path(settings.log_file_path)
-    log_file.parent.mkdir(parents=True, exist_ok=True)
-
-    file_handler = RotatingFileHandler(
-        log_file,
-        maxBytes=BIGGEST_FILE_BYTES,
-        backupCount=HOW_MANY_OLD_FILES,
-        encoding="utf-8",
-    )
-    file_handler.setFormatter(JsonLogFormatter())
-    logger.addHandler(file_handler)
+    logger.addHandler(RunLogHandler())
 
     if settings.log_to_console:
         console_handler = logging.StreamHandler()

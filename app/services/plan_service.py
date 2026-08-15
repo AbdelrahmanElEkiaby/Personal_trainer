@@ -1,10 +1,14 @@
-"""The use case of the app: take a user profile and return a full plan."""
+"""The use case of the app: take a user profile and return a full plan.
+
+A real service: it does no calculation of its own, it only runs the graph and
+puts the three results together.
+"""
 
 from app.agent.trainer_graph import trainer_graph
 from app.core.config import settings
 from app.schemas.plan_response import PlanResponse
 from app.schemas.user_profile import UserProfile
-from app.services.log_service import log_event
+from app.observability.logger import log_event
 
 
 def create_full_plan(user_profile: UserProfile) -> PlanResponse:
@@ -21,6 +25,8 @@ def create_full_plan(user_profile: UserProfile) -> PlanResponse:
     initial_state = {
         "user_profile": user_profile,
         "bmi_result": None,
+        "food_facts": "",
+        "exercise_facts": "",
         "diet_plan": None,
         "training_plan": None,
     }

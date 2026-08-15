@@ -2,13 +2,16 @@
 
 Nothing else in the app should call the logging library directly, so every line
 has the same shape and the request id is never forgotten.
+
+Careful: the API key is only hidden inside log_api_call. Anything that logs a
+parameter dictionary another way will write the key in clear text.
 """
 
 import logging
 
 from app.core.config import settings
-from app.core.logging_config import LOGGER_NAME
-from app.core.request_context import count_one, get_request_id
+from app.core.request_context import count_one, count_tokens, get_request_id
+from app.observability.logging_config import LOGGER_NAME
 
 # We never want to write the API key in a file, it is a secret.
 SECRET_PARAM_NAMES = ["api_key", "apikey", "key", "token"]
@@ -66,6 +69,27 @@ def log_api_call(
         error=error,
         level=logging.WARNING if error else logging.DEBUG,
     )
+
+
+def remember_tokens(model_answer) -> dict:
+    """Read the token counts of one model answer and add them to the request."""
+    tokens = getattr(model_answer, "usage_metadata", None) or {}
+    count_tokens(tokens.get("input_tokens", 0), tokens.get("output_tokens", 0))
+    return {
+        "input_tokens": tokens.get("input_tokens", 0),
+        "output_tokens": tokens.get("output_tokens", 0),
+    }
+
+
+def estimate_cost_usd(input_tokens: int, output_tokens: int) -> float | None:
+    """What this request cost, when the prices are written in the .env file."""
+    input_price = settings.openai_input_price_per_million
+    output_price = settings.openai_output_price_per_million
+    if not input_price and not output_price:
+        return None
+
+    cost = (input_tokens * input_price + output_tokens * output_price) / 1_000_000
+    return round(cost, 6)
 
 
 def describe_value(value):

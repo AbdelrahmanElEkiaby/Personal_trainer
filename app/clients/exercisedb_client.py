@@ -13,7 +13,7 @@ import httpx
 
 from app.core.config import settings
 from app.schemas.exercise_info import ExerciseInfo
-from app.services.log_service import log_api_call
+from app.observability.logger import log_api_call
 
 # The paths that give us the names the API accepts.
 BODY_PARTS_PATH = "/bodyparts"

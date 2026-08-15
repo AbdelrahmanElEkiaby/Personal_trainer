@@ -11,11 +11,17 @@ import re
 from app.clients import exercisedb_client, usda_client
 from app.clients.exercisedb_client import ExerciseDbError
 from app.clients.usda_client import UsdaApiError
+from app.core.request_context import (
+    EXERCISE_ID_KIND,
+    FOOD_ID_KIND,
+    get_id_for_name,
+    get_shown_ids,
+)
+from app.domain.exercise_safety import is_exercise_unsafe
+from app.domain.nutrition_math import calculate_macros_calories
+from app.observability.logger import log_event
 from app.schemas.diet_plan import DietPlan
 from app.schemas.training_plan import TrainingPlan
-from app.services.log_service import log_event
-from app.services.medical_safety import is_exercise_unsafe
-from app.services.nutrition_math import calculate_macros_calories
 
 # When a portion is written like "1 medium" we cannot know the grams, so we use this.
 DEFAULT_PORTION_GRAMS = 100
@@ -47,8 +53,21 @@ def enrich_diet_plan(diet_plan: DietPlan) -> DietPlan:
             portion_grams = read_portion_grams(food.portion)
             why_it_failed = ""
             try:
-                real_food = usda_client.find_food_nutrition(food.food_name, portion_grams)
-            except UsdaApiError as error:
+                # When the model already chose the food with the tools we use its
+                # id, because it is exact. Searching the name again would give us
+                # the first result, which is often the wrong food.
+                # The model copies the exact name the tool showed, so we can find
+                # the id again without searching and without trusting an id it
+                # may have invented.
+                id_the_tools_showed = get_id_for_name(FOOD_ID_KIND, food.food_name)
+                if id_the_tools_showed:
+                    food.fdc_id = id_the_tools_showed
+                    real_food = usda_client.get_food_nutrition(
+                        int(id_the_tools_showed), portion_grams
+                    )
+                else:
+                    real_food = usda_client.find_food_nutrition(food.food_name, portion_grams)
+            except (UsdaApiError, ValueError) as error:
                 real_food = None
                 why_it_failed = str(error)
 
@@ -72,6 +91,7 @@ def enrich_diet_plan(diet_plan: DietPlan) -> DietPlan:
                     "asked": food.food_name,
                     "matched": real_food.food_name,
                     "fdc_id": real_food.fdc_id,
+                    "chosen_by": "model_from_tools" if food.fdc_id else "first_search_result",
                     "portion_grams": portion_grams,
                     "calories_before": food.calories,
                     "calories_after": real_food.calories,
@@ -156,6 +176,29 @@ def _add_up(diet_plan: DietPlan, field_name: str) -> float:
     )
 
 
+def _read_the_exercise_the_model_chose(exercise_id: str):
+    """Read the exact exercise when the model already picked one with the tools."""
+    if not exercise_id:
+        return None
+
+    # An id the tools never showed is an id the model invented, and those ids
+    # often exist, so they would quietly give us a completely different exercise.
+    if exercise_id not in get_shown_ids(EXERCISE_ID_KIND):
+        log_event(
+            "enrichment",
+            "invented_id_refused",
+            details={"kind": "exercise", "exercise_id": exercise_id},
+            level=logging.WARNING,
+        )
+        return None
+
+    try:
+        return exercisedb_client.get_exercise_by_id(exercise_id)
+    except ExerciseDbError:
+        # The model may have invented an id, so we search by name instead.
+        return None
+
+
 def _find_exercise_in_exercisedb(exercise_name: str, allowed_equipment: list[str]):
     """Find the ExerciseDB exercise that fits the name and the equipment we have."""
     try:
@@ -191,7 +234,10 @@ def enrich_training_plan(
 
     for day in training_plan.workout_days:
         for exercise in day.exercises:
-            real_exercise = _find_exercise_in_exercisedb(exercise.name, allowed_equipment)
+            real_exercise = _read_the_exercise_the_model_chose(exercise.exercise_id)
+            if real_exercise is None:
+                real_exercise = _find_exercise_in_exercisedb(exercise.name, allowed_equipment)
+
             if real_exercise is None:
                 exercises_not_found.append(exercise.name)
                 log_event(

@@ -10,7 +10,7 @@ import httpx
 
 from app.core.config import settings
 from app.schemas.food_nutrition import FoodNutrition, FoodSearchResult, Micronutrient
-from app.services.log_service import log_api_call
+from app.observability.logger import log_api_call
 
 # USDA gives every nutrient a number. These are the ones we care about.
 CALORIES_NUMBER = "208"

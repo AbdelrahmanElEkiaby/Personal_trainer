@@ -9,7 +9,7 @@ import logging
 import time
 
 from app.core.request_context import save_step_time
-from app.services.log_service import describe_value, log_event
+from app.observability.logger import describe_value, log_event
 
 
 def log_node(step_name: str):

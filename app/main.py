@@ -3,7 +3,7 @@ from fastapi import FastAPI
 from app.api.middleware.request_logging_middleware import RequestLoggingMiddleware
 from app.api.routes import health_router, trainer_router
 from app.core.config import settings
-from app.core.logging_config import setup_logging
+from app.observability.logging_config import setup_logging
 
 # The logger must be ready before anything else writes a line.
 setup_logging()

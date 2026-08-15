@@ -8,7 +8,7 @@ table". USDA does this job properly, so the tool was removed.
 
 from langchain_core.tools import tool
 
-from app.services import nutrition_math
+from app.domain import nutrition_math
 
 
 @tool

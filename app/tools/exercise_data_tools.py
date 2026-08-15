@@ -2,10 +2,14 @@ from langchain_core.tools import tool
 
 from app.clients import exercisedb_client
 from app.clients.exercisedb_client import ExerciseDbError
+from app.core.request_context import EXERCISE_ID_KIND, remember_shown_ids
 
 
 def _to_simple_list(exercises) -> list[dict]:
     """Keep only the fields the model needs, so the answer stays short."""
+    # We write down the ids we showed, so we can refuse an invented one later.
+    remember_shown_ids(EXERCISE_ID_KIND, [exercise.exercise_id for exercise in exercises])
+
     return [
         {
             "exercise_id": exercise.exercise_id,

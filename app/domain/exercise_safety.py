@@ -1,4 +1,8 @@
-"""Knows which exercises are dangerous for which medical condition."""
+"""Knows which exercises are dangerous for which medical condition.
+
+Pure rules: this file reads nothing, calls nothing, and answers the same way
+every time.
+"""
 
 # Exercises we should not give to a user with this medical condition.
 UNSAFE_EXERCISES_BY_CONDITION = {

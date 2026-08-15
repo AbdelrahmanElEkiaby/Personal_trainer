@@ -3,7 +3,7 @@ from app.agent.node_logging import log_node
 from app.agent.prompts import TRAINING_PLAN_PROMPT
 from app.agent.state import TrainerState
 from app.schemas.training_plan import TrainingPlan
-from app.services.training_equipment import get_equipment_for_location
+from app.domain.training_equipment import get_equipment_for_location
 
 
 @log_node("design_training_plan")
@@ -28,6 +28,8 @@ def design_training_plan_node(state: TrainerState) -> dict:
         bmi=bmi_result.bmi,
         bmi_category=bmi_result.category,
         daily_calories=diet_plan.daily_calories,
+        exercise_facts=state.get("exercise_facts")
+        or "You have no tool data, use what you know.",
     )
 
     training_plan = ask_model_for(TrainingPlan, prompt)
