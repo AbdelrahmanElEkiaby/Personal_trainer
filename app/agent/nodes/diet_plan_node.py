@@ -1,4 +1,4 @@
-from app.agent.llm_provider import get_llm
+from app.agent.llm_provider import ask_model_for
 from app.agent.prompts import DIET_PLAN_PROMPT
 from app.agent.state import TrainerState
 from app.schemas.diet_plan import DietPlan
@@ -22,6 +22,5 @@ def design_diet_plan_node(state: TrainerState) -> dict:
         maintenance_calories=bmi_result.maintenance_calories,
     )
 
-    llm = get_llm().with_structured_output(DietPlan)
-    diet_plan = llm.invoke(prompt)
+    diet_plan = ask_model_for(DietPlan, prompt)
     return {"diet_plan": diet_plan}

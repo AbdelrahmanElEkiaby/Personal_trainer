@@ -1,5 +1,3 @@
-"""Nutrition tools. They are ready but the graph does not call them yet."""
-
 from langchain_core.tools import tool
 
 # Calories of one gram of each macro nutrient.

@@ -1,7 +1,8 @@
-from app.agent.llm_provider import get_llm
+from app.agent.llm_provider import ask_model_for
 from app.agent.prompts import TRAINING_PLAN_PROMPT
 from app.agent.state import TrainerState
 from app.schemas.training_plan import TrainingPlan
+from app.services.training_equipment import get_equipment_for_location
 
 
 def design_training_plan_node(state: TrainerState) -> dict:
@@ -9,6 +10,8 @@ def design_training_plan_node(state: TrainerState) -> dict:
     user_profile = state["user_profile"]
     bmi_result = state["bmi_result"]
     diet_plan = state["diet_plan"]
+
+    available_equipment = get_equipment_for_location(user_profile.training_location)
 
     prompt = TRAINING_PLAN_PROMPT.format(
         age=user_profile.age,
@@ -18,11 +21,12 @@ def design_training_plan_node(state: TrainerState) -> dict:
         activity_level=user_profile.activity_level.value,
         workout_days_per_week=user_profile.workout_days_per_week,
         medical_conditions=", ".join(user_profile.medical_conditions) or "none",
+        training_location=user_profile.training_location.value,
+        available_equipment=", ".join(available_equipment),
         bmi=bmi_result.bmi,
         bmi_category=bmi_result.category,
         daily_calories=diet_plan.daily_calories,
     )
 
-    llm = get_llm().with_structured_output(TrainingPlan)
-    training_plan = llm.invoke(prompt)
+    training_plan = ask_model_for(TrainingPlan, prompt)
     return {"training_plan": training_plan}

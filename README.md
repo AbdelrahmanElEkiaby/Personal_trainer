@@ -44,8 +44,13 @@ app/
     diet_plan.py
     training_plan.py
     plan_response.py
+  clients/                     talks to the outside APIs
+    usda_client.py             USDA FoodData Central
+    exercisedb_client.py       ExerciseDB
   tools/                       ready for later, not called by the graph yet
     nutrition_tools.py
+    food_data_tools.py         real food data from USDA
+    exercise_data_tools.py     real exercises from ExerciseDB
     workout_tools.py
     tool_registry.py
 ```
@@ -82,11 +87,10 @@ uvicorn app.main:app --reload
 
 ## Endpoints
 
-| Method | URL              | What it does                                  |
-| ------ | ---------------- | --------------------------------------------- |
-| GET    | `/health`        | Checks the app is running and shows the model |
-| POST   | `/trainer/bmi`   | Calculates the BMI only (fast, no model)      |
-| POST   | `/trainer/plan`  | Calculates the BMI + diet plan + training plan |
+| Method | URL             | What it does                                   |
+| ------ | --------------- | ---------------------------------------------- |
+| GET    | `/health`       | Checks the app is running and shows the model  |
+| POST   | `/trainer/plan` | Calculates the BMI + diet plan + training plan |
 
 ## Example request
 
@@ -99,9 +103,15 @@ uvicorn app.main:app --reload
   "activity_level": "lightly_active",
   "food_preferences": ["chicken", "rice", "no seafood"],
   "workout_days_per_week": 4,
-  "medical_conditions": ["knee pain"]
+  "medical_conditions": ["knee pain"],
+  "training_location": "home_with_dumbbells"
 }
 ```
+
+`training_location` can be `gym`, `home_with_dumbbells` or `home_body_weight`.
+We turn it into a list of equipment names in
+`app/services/training_equipment.py`, and the training plan can only use
+exercises that need one of those equipments.
 
 ## The tools
 
@@ -109,7 +119,91 @@ The files in `app/tools/` are ready but no node calls them yet. When we want the
 model to use them, we bind them to the model inside the node:
 
 ```python
-from app.tools.tool_registry import NUTRITION_TOOLS
+from app.tools.tool_registry import FOOD_DATA_TOOLS
 
-llm = get_llm().bind_tools(NUTRITION_TOOLS)
+llm = get_llm().bind_tools(FOOD_DATA_TOOLS)
 ```
+
+## Real food data (USDA)
+
+`app/clients/usda_client.py` reads the real nutrition of any food from the
+USDA FoodData Central database: calories, protein, carbs, fat, fiber and 14
+micronutrients (Calcium, Iron, Magnesium, Phosphorus, Potassium, Sodium, Zinc,
+Vitamin A, C, D, E, K, B6 and B12).
+
+USDA always gives the numbers for 100 grams, so the client scales them to the
+portion we ask for.
+
+### The API key
+
+`DEMO_KEY` works out of the box but it only allows **30 requests per hour**.
+Get a free key from https://fdc.nal.usda.gov/api-key-signup.html and put it in
+the `.env` file:
+
+```
+USDA_API_KEY=your_key_here
+```
+
+### Important: search twice before you trust a result
+
+The first search result is not always the food you meant. Searching for
+`banana` returns the dried banana powder first, and that has about 3 times the
+calories of a fresh banana. So the correct way is two steps:
+
+```python
+# 1. Look at the matches and their ids
+search_foods_by_name("banana")
+# -> [{"fdc_id": 1105314, "name": "Bananas, ripe and slightly ripe, raw"}, ...]
+
+# 2. Ask for the one you really want
+get_food_nutrition_by_id(fdc_id=1105314, portion_grams=120)
+```
+
+`get_food_nutrition_facts(food_name)` does both steps in one call. It is easier
+but it trusts the first match, so only use it when the food name is very clear.
+
+### The guard on the search
+
+USDA answers almost every search, even a search that makes no sense. Searching
+for `zzzzqqq not a food` used to return Oats, only because the word "food" is
+inside "Oats (Includes foods for USDA's Food Distribution Program)".
+
+So `search_foods_by_name` now checks three things:
+
+1. The name is not empty and has at least 2 letters.
+2. The name has at least one word that really describes a food. Words like
+   "food", "raw" or "fresh" are too common to count.
+3. Every result USDA sends back must contain one of those words, if not we drop it.
+
+When nothing survives the check, the tool answers with a clear error instead of
+a wrong food.
+
+## Real exercises (ExerciseDB)
+
+`app/clients/exercisedb_client.py` reads real exercises from ExerciseDB. Every
+exercise comes with its name, body part, target muscle, equipment, the secondary
+muscles it also trains, and the steps that explain how to do it.
+
+### No API key needed
+
+We use the free and open host, `https://oss.exercisedb.dev/api/v1`. It needs no
+key and no sign up, and it holds 1500 exercises.
+
+The paid host adds bigger GIFs and a difficulty level, but the free one already
+gives everything our training plan needs.
+
+### The names ExerciseDB accepts
+
+ExerciseDB only knows 10 body parts, 50 muscles and 28 equipments. "legs" is not
+a body part, the correct name is "upper legs".
+
+This matters a lot, because when we send a name the API does not know, **it does
+not answer with an error**. It quietly ignores our filter and sends all the 1500
+exercises. So asking for "muscles=biceps" instead of "targetMuscles=biceps"
+gives back chest and back exercises, and nothing tells us something went wrong.
+
+To stay safe:
+
+- The client asks the API one time for the allowed names and keeps them.
+- Every filter name is checked against that list before we call the API.
+- `get_allowed_exercise_names` gives the model the full list of names it can use.

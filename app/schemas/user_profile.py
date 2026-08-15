@@ -8,6 +8,14 @@ class Gender(str, Enum):
     FEMALE = "female"
 
 
+class TrainingLocation(str, Enum):
+    """Where the person trains. We use it to know which equipment they can use."""
+
+    HOME_BODY_WEIGHT = "home_body_weight"
+    HOME_WITH_DUMBBELLS = "home_with_dumbbells"
+    GYM = "gym"
+
+
 class ActivityLevel(str, Enum):
     SEDENTARY = "sedentary"
     LIGHTLY_ACTIVE = "lightly_active"
@@ -29,6 +37,10 @@ class UserProfile(BaseModel):
         description="Foods the user likes, or a diet style such as vegetarian",
     )
     workout_days_per_week: int = Field(ge=1, le=7, description="How many days the user can train")
+    training_location: TrainingLocation = Field(
+        default=TrainingLocation.GYM,
+        description="Where the user trains, it decides which equipment we can use",
+    )
     medical_conditions: list[str] = Field(
         default_factory=list,
         description="Health problems to consider in the diet or in the training",
